@@ -1,0 +1,168 @@
+rules_version = '2';
+
+// EHS HERO - Firestore Security Rules
+//
+// Implements spec section 20's role model:
+//   STAFF - can only read/write their own activities, XP, profile
+//   HSE   - can read everything, approve/reject, award/deduct XP, manage
+//           missions/challenges
+//   ADMIN - everything HSE can do, plus manage users/roles/projects/badges/
+//           levels/point rules
+//
+// Role is read from the requester's own `users/{uid}.role` field via a
+// helper get() call - the standard way to do role-based access in pure
+// Firestore rules without a server. That get() costs one extra document
+// read per rule evaluation; acceptable at this app's scale (see README
+// "Scaling notes").
+//
+// Deploy with: firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function requesterRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isHseOrAdmin() {
+      return isSignedIn() && requesterRole() in ['HSE', 'ADMIN'];
+    }
+
+    function isAdmin() {
+      return isSignedIn() && requesterRole() == 'ADMIN';
+    }
+
+    // ---- USERS ----
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isHseOrAdmin());
+
+      // Only self-creation (see UserRepository.createStaffAccount - the
+      // write happens while authenticated AS the just-created account via
+      // a short-lived secondary Firebase session).
+      allow create: if isSignedIn() && request.auth.uid == uid;
+
+      allow update: if isSignedIn() && (
+        // Staff editing their own limited profile fields
+        (request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['avatarId', 'name', 'designation', 'projectId', 'projectName', 'fcmToken'])) ||
+        // HSE/Admin crediting XP/level/streak/badge-counters via an approval
+        // or manual adjustment (spec section 4/6/14)
+        (isHseOrAdmin() &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'totalXp', 'level', 'currentStreak', 'longestStreak', 'lastActivityDateMillis',
+            'approvedObservationCount', 'approvedTbtCount', 'approvedHazardCount', 'approvedTotalCount',
+            'approvedNearMissCount', 'approvedTrainingCount', 'approvedGoodPracticeCount', 'approvedRescueCount'
+          ])) ||
+        // Admin managing role/status (spec section 4)
+        (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'status']))
+      );
+
+      allow delete: if false; // disable via status instead - preserves history
+    }
+
+    // ---- PROJECTS ----
+    match /projects/{projectId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- ACTIVITIES ----
+    match /activities/{activityId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isHseOrAdmin());
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'PENDING';
+      // Only a reviewer can move a PENDING activity to APPROVED/REJECTED -
+      // never editable once decided.
+      allow update: if isHseOrAdmin() && resource.data.status == 'PENDING';
+      allow delete: if false;
+    }
+
+    // ---- APPROVALS (audit trail - spec section 19) ----
+    match /approvals/{approvalId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isHseOrAdmin());
+      allow create: if isHseOrAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---- XP TRANSACTIONS (audit trail - spec section 19) ----
+    match /xpTransactions/{txId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isHseOrAdmin());
+      allow create: if isHseOrAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---- BADGES (catalog) ----
+    match /badges/{badgeId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- USER BADGES (unlock records) ----
+    match /userBadges/{docId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isHseOrAdmin());
+      allow create: if isHseOrAdmin();
+      allow update, delete: if false;
+    }
+
+    // ---- LEVELS (catalog) ----
+    match /levels/{levelNumber} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- MISSIONS (catalog, HSE/Admin-created per spec section 15) ----
+    match /missions/{missionId} {
+      allow read: if isSignedIn();
+      allow write: if isHseOrAdmin();
+    }
+
+    // ---- USER MISSIONS (per-user progress) ----
+    match /userMissions/{docId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isHseOrAdmin());
+      // Staff can write their OWN progress doc (start/complete a mission);
+      // HSE/Admin can write any (the approval flow flips it to APPROVED).
+      allow write: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isHseOrAdmin());
+    }
+
+    // ---- MONTHLY CHALLENGE (spec section 16) ----
+    match /challenges/{challengeId} {
+      allow read: if isSignedIn();
+      allow write: if isHseOrAdmin();
+    }
+
+    // ---- NOTIFICATIONS ----
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isHseOrAdmin();
+      // Owner may only flip the read flag, nothing else.
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow delete: if false;
+    }
+
+    // ---- SETTINGS (point rules, single doc) ----
+    match /settings/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---- USERNAME INDEX (Employee ID -> email, for login only) ----
+    // Deliberately readable by anyone, including signed-out requests -
+    // login needs to resolve an Employee ID to an email BEFORE the user is
+    // authenticated. Only ever contains a plain email string, nothing
+    // sensitive. `list` is explicitly disabled so the whole collection
+    // can't be enumerated - only a direct, already-known document id can
+    // be read.
+    match /usernameIndex/{employeeId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+  }
+}

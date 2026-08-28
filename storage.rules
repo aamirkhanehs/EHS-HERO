@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Optional Firebase Storage rules - only relevant if you enable the
+// Storage-based photo upload path (see README "Photo storage"). Firebase
+// Storage now requires the Blaze plan (as of Feb 2026), so the app's
+// default path stores compressed photos directly on the Firestore
+// document instead (see util/PhotoCompressor.kt) and needs none of this.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /activity_photos/{uid}/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

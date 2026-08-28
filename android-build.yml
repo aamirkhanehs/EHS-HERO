@@ -1,0 +1,113 @@
+name: Build EHS Hero APK
+
+# Builds the app entirely in GitHub's cloud runners - this is the answer to
+# spec section 29's "don't assume the user has admin rights on their
+# company computer, prefer a workflow that can build on a personal computer
+# or cloud environment". Push this repo to GitHub (a free account is
+# enough) and every push/PR to main produces downloadable APKs under this
+# workflow run's "Artifacts" section - no local Android Studio required.
+#
+# One-time setup: add a GOOGLE_SERVICES_JSON repository secret (see README
+# "Firebase setup" for how to get the base64 value). Everything else is
+# optional - see "Signing the release build" below.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Set up google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 --decode > app/google-services.json
+            echo "Wrote app/google-services.json from the GOOGLE_SERVICES_JSON secret."
+          elif [ -f app/google-services.json ]; then
+            echo "Using app/google-services.json already committed to the repo."
+          else
+            echo "::error::No google-services.json found. Add a GOOGLE_SERVICES_JSON repository secret (base64-encoded) or commit app/google-services.json directly. See README 'Firebase setup'."
+            exit 1
+          fi
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', 'gradle/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ehs-hero-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      # --- Release build ---
+      # Signing the release build is optional. Without it you still get a
+      # working, installable *unsigned* release APK you can inspect or sign
+      # yourself later. To get a properly signed release build straight out
+      # of CI, add these four repository secrets (see README "Release
+      # APK" for how to generate a keystore):
+      #   RELEASE_KEYSTORE_BASE64, RELEASE_STORE_PASSWORD,
+      #   RELEASE_KEY_ALIAS, RELEASE_KEY_PASSWORD
+      - name: Decode release keystore
+        id: keystore
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+            echo "No RELEASE_KEYSTORE_BASE64 secret set - building an unsigned release APK."
+          fi
+
+      - name: Build release APK
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ "${{ steps.keystore.outputs.has_keystore }}" = "true" ]; then
+            ./gradlew assembleRelease --stacktrace \
+              -PRELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore" \
+              -PRELEASE_STORE_PASSWORD="$RELEASE_STORE_PASSWORD" \
+              -PRELEASE_KEY_ALIAS="$RELEASE_KEY_ALIAS" \
+              -PRELEASE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+          else
+            ./gradlew assembleRelease --stacktrace
+          fi
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ehs-hero-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
