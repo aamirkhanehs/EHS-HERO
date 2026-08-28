@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Base application theme. All real UI theming happens in Compose
+         (see ui/theme/Theme.kt) - this XML theme only needs to exist so the
+         Activity has a valid theme before Compose content is set, and so the
+         splash screen (below) has something to extend. -->
+    <style name="Theme.EHSHero" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/command_navy</item>
+        <item name="android:navigationBarColor">@color/command_navy</item>
+        <item name="android:windowBackground">@color/command_navy</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+    </style>
+
+    <!-- Splash screen theme, used only for the brief moment between tapping
+         the launcher icon and Compose taking over (androidx.core.splashscreen,
+         works consistently pre- and post- Android 12). -->
+    <style name="Theme.EHSHero.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/command_navy</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.EHSHero</item>
+    </style>
+
+</resources>

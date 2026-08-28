@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- EHS Hero design tokens - "Command HUD" palette.
+         Kept in sync with ui/theme/Color.kt (the source of truth for Compose UI). -->
+    <color name="command_navy">#0B1220</color>
+    <color name="steel_panel">#141C2E</color>
+    <color name="steel_panel_elevated">#1B2740</color>
+    <color name="guardian_amber">#FFB020</color>
+    <color name="signal_cyan">#2FD4D9</color>
+    <color name="clearance_green">#35C97A</color>
+    <color name="hazard_coral">#F0553F</color>
+    <color name="text_high">#F4F6FA</color>
+    <color name="text_medium">#9AA7BD</color>
+    <color name="outline">#2A3548</color>
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+</resources>

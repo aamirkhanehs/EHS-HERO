@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EHS Hero</string>
+    <string name="app_tagline">Every Safe Action Makes You A Hero.</string>
+    <string name="default_notification_channel_id">ehs_hero_default_channel</string>
+    <string name="default_notification_channel_name">EHS Hero Alerts</string>
+</resources>

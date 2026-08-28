@@ -1,0 +1,28 @@
+{
+  "_comment": "This is a PLACEHOLDER, not a real config file - the app will not build against it. Download your real google-services.json from Firebase Console (Project settings > General > Your apps > EHS Hero > google-services.json) and either: (a) save it as app/google-services.json for a local build, or (b) base64-encode it and store it in a GOOGLE_SERVICES_JSON GitHub secret for CI builds. See README.md 'Firebase setup'.",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "your-firebase-project-id",
+    "storage_bucket": "your-firebase-project-id.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.ehshero.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        { "current_key": "REPLACE_WITH_REAL_KEY" }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
