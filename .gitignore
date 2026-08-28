@@ -1,0 +1,21 @@
+*.iml
+.gradle/
+/local.properties
+.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+
+# Firebase config is project-specific and (for public repos) sensitive -
+# see README "Firebase setup". Remove this line if you'd rather commit it
+# directly instead of using the GOOGLE_SERVICES_JSON GitHub secret.
+app/google-services.json
+
+# Release signing material - never commit a real keystore.
+*.keystore
+*.jks
+release.keystore
